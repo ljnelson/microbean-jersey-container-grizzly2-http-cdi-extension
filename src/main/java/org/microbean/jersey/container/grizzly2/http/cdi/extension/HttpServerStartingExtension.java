@@ -26,7 +26,6 @@ import java.util.concurrent.CountDownLatch;
 import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.context.Initialized;
 
-import javax.enterprise.event.Event;
 import javax.enterprise.event.Observes;
 import javax.enterprise.event.ObservesAsync;
 
@@ -40,12 +39,9 @@ import javax.annotation.Priority;
 
 import org.glassfish.grizzly.http.server.HttpServer;
 
-import org.microbean.configuration.cdi.annotation.ConfigurationValue;
+import org.microbean.cdi.AbstractBlockingExtension;
 
 import static javax.interceptor.Interceptor.Priority.LIBRARY_AFTER;
-import static javax.interceptor.Interceptor.Priority.LIBRARY_BEFORE;
-import static javax.interceptor.Interceptor.Priority.PLATFORM_AFTER;
-import static javax.interceptor.Interceptor.Priority.PLATFORM_BEFORE;
 
 /**
  *
@@ -56,16 +52,12 @@ import static javax.interceptor.Interceptor.Priority.PLATFORM_BEFORE;
  *
  * @see HttpServer#start()
  */
-public class HttpServerStartingExtension implements Extension {
+public class HttpServerStartingExtension extends AbstractBlockingExtension {
 
   private final Collection<HttpServer> startedHttpServers;
 
-  private final CountDownLatch latch;
-  
   public HttpServerStartingExtension() {
-    super();
-    this.latch = new CountDownLatch(1);
-    Runtime.getRuntime().addShutdownHook(new ShutdownHook());
+    super(new CountDownLatch(1));
     this.startedHttpServers = new LinkedList<>();
   }
 
@@ -79,25 +71,42 @@ public class HttpServerStartingExtension implements Extension {
         synchronized (this.startedHttpServers) {
           for (final HttpServer httpServer : httpServers) {
             if (httpServer != null) {
-              httpServer.start(); // starts daemon
-              // now store it away because we don't know what scope it's in; could be @Dependent
+              // This asynchronous method starts a daemon thread in
+              // the background; see
+              // https://github.com/GrizzlyNIO/grizzly-mirror/blob/2.3.x/modules/http-server/src/main/java/org/glassfish/grizzly/http/server/HttpServer.java#L816
+              // and work backwards to the start() method.  Among
+              // other things, that won't prevent the JVM from exiting
+              // normally.  Think about that for a while.  We'll need
+              // another mechanism to block the CDI container from
+              // simply shutting down.
+              httpServer.start();
+
+              // We store our own list of started HttpServers to use
+              // in other methods in this class rather than relying on
+              // Instance<HttpServer> because we don't know what scope
+              // the HttpServer instances in question are.  For
+              // example, they might be in Dependent scope, which
+              // would mean every Instance#get() invocation might
+              // create a new one.
               this.startedHttpServers.add(httpServer);
             }
           }
           if (!this.startedHttpServers.isEmpty()) {
-            beanManager.getEvent().select(ServersStarted.class).fireAsync(new ServersStarted());
+            // Here we fire an *asynchronous* event that will cause
+            // the thread it is received on to block (see the block()
+            // method below).  This is key: the JVM will be prevented
+            // from exiting, and the thread that the event is received
+            // on is (a) a non-daemon thread and (b) managed by the
+            // container.  This is, in other words, a clever way to
+            // take advantage of the CDI container's mandated thread
+            // management behavior so that the CDI container stays up
+            // for at least as long as the HttpServer we spawned
+            // above.
+            this.fireBlockingEvent(beanManager);
           }
         }
       }
     }
-  }
-
-  private final void block(@ObservesAsync final ServersStarted event) throws InterruptedException {    
-    this.latch.await();
-  }
-
-  void unblock() {
-    this.latch.countDown();
   }
 
   private final void stopHttpServers(@Observes final BeforeShutdown event) {
@@ -108,27 +117,6 @@ public class HttpServerStartingExtension implements Extension {
         }
       }
     }
-  }
-
-  private final class ShutdownHook extends Thread {
-
-    private ShutdownHook() {
-      super();
-    }
-
-    @Override
-    public final void run() {      
-      unblock();
-    }
-    
-  }
-
-  private static final class ServersStarted {
-
-    private ServersStarted() {
-      super();
-    }
-    
   }
   
 }
