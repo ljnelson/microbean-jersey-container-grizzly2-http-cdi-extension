@@ -63,6 +63,7 @@ public class TestHttpServerStartingExtension {
 
   @Test
   public void testContainerStartup() {
+    System.setProperty("port", "8080");
     final int oldInstanceCount = instanceCount;
     assertEquals(1, oldInstanceCount);
     Main.main(null);
