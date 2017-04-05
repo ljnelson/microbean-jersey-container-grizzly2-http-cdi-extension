@@ -103,14 +103,14 @@
       <dependency>
         <groupId>org.microbean</groupId>
         <artifactId>microbean-grizzly-http-server-cdi</artifactId>
-        <version>0.1.3</version>
+        <version>0.1.2</version>
         <type>jar</type>
       </dependency>
       
       <dependency>
         <groupId>org.microbean</groupId>
         <artifactId>microbean-jersey-container-grizzly2-http-cdi</artifactId>
-        <version>0.1.2</version>
+        <version>0.1.3</version>
         <type>jar</type>
       </dependency>
       
