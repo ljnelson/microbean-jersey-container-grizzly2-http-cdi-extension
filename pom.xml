@@ -12,7 +12,7 @@
   <parent>
     <groupId>org.microbean</groupId>
     <artifactId>microbean-pluginmanagement-pom</artifactId>
-    <version>1</version>
+    <version>3</version>
   </parent>
 
   <name>MicroBean Jersey Container Grizzly2 HTTP CDI Portable Extension</name>
@@ -103,7 +103,7 @@
       <dependency>
         <groupId>org.microbean</groupId>
         <artifactId>microbean-grizzly-http-server-cdi</artifactId>
-        <version>0.1.2</version>
+        <version>0.1.3</version>
         <type>jar</type>
       </dependency>
       
