@@ -7,7 +7,7 @@
   </prerequisites>
 
   <artifactId>microbean-jersey-container-grizzly2-http-cdi-extension</artifactId>
-  <version>0.1.3-SNAPSHOT</version>
+  <version>0.2.0-SNAPSHOT</version>
 
   <parent>
     <groupId>org.microbean</groupId>
@@ -73,10 +73,11 @@
       </dependency>
 
       <dependency>
-        <groupId>org.glassfish.jersey.containers</groupId>
-        <artifactId>jersey-container-grizzly2-http</artifactId>
-        <version>2.26-b03</version>
-        <type>jar</type>
+        <groupId>org.glassfish.jersey</groupId>
+        <artifactId>jersey-bom</artifactId>
+        <version>2.25.1</version>
+        <type>pom</type>
+        <scope>import</scope>
       </dependency>
 
       <dependency>
@@ -89,7 +90,7 @@
       <dependency>
         <groupId>org.microbean</groupId>
         <artifactId>microbean-configuration-cdi</artifactId>
-        <version>0.1.2</version>
+        <version>0.1.3</version>
         <type>jar</type>
       </dependency>
       
@@ -110,7 +111,7 @@
       <dependency>
         <groupId>org.microbean</groupId>
         <artifactId>microbean-jersey-container-grizzly2-http-cdi</artifactId>
-        <version>0.1.3</version>
+        <version>0.2.1</version>
         <type>jar</type>
       </dependency>
       

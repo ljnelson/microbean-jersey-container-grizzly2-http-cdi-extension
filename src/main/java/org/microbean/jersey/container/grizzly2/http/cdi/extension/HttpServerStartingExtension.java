@@ -159,6 +159,9 @@ public class HttpServerStartingExtension extends AbstractBlockingExtension {
                 // exiting normally.  Think about that for a while.
                 // We'll need another mechanism to block the CDI
                 // container from simply shutting down.
+                if (this.logger.isInfoEnabled()) {
+                  this.logger.info("Starting HttpServer: {}", httpServer);
+                }
                 httpServer.start();
                 
                 // We store our own list of started HttpServers to use
