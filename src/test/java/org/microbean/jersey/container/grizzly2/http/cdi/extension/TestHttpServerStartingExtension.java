@@ -18,6 +18,7 @@ package org.microbean.jersey.container.grizzly2.http.cdi.extension;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.context.BeforeDestroyed;
+import javax.enterprise.context.Initialized;
 
 import javax.enterprise.event.Observes;
 
@@ -55,12 +56,11 @@ public class TestHttpServerStartingExtension {
   }
 
 
-  private final void onShutdown(@Observes @BeforeDestroyed(ApplicationScoped.class) final Object event, final HttpServerStartingExtension extension) throws InterruptedException {
+  private final void onStartup(@Observes @Initialized(ApplicationScoped.class) final Object event, final HttpServerStartingExtension extension) throws InterruptedException {
     assertNotNull(extension);
-    extension.unblock();
+    org.microbean.cdi.AbstractBlockingExtension.unblockAll();
   }
   
-
   @Test
   public void testContainerStartup() {
     System.setProperty("port", "8080");

@@ -22,9 +22,11 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.LinkedList;
 
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 import javax.enterprise.context.ApplicationScoped;
+import javax.enterprise.context.BeforeDestroyed;
 import javax.enterprise.context.Initialized;
 
 import javax.enterprise.event.Observes;
@@ -33,7 +35,6 @@ import javax.enterprise.event.ObservesAsync;
 import javax.enterprise.inject.Instance;
 
 import javax.enterprise.inject.spi.BeanManager;
-import javax.enterprise.inject.spi.BeforeShutdown;
 import javax.enterprise.inject.spi.Extension;
 
 import javax.annotation.Priority;
@@ -52,9 +53,9 @@ import static javax.interceptor.Interceptor.Priority.LIBRARY_AFTER;
  * container} and, for each one, {@linkplain HttpServer#start() starts
  * it}.
  *
- * <p>A {@linkplain #fireBlockingEvent(BeanManager) blocking event is
- * then fired} to keep the container up and running while the {@link
- * HttpServer}s are running.</p>
+ * <p>The CDI container is {@linkplain AbstractBlockingExtension
+ * blocked politely} to keep the container up and running while the
+ * {@link HttpServer}s are running.</p>
  *
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
@@ -72,7 +73,7 @@ public class HttpServerStartingExtension extends AbstractBlockingExtension {
    * Instance fields.
    */
 
-
+  
   /**
    * A {@link Collection} of {@link HttpServer}s that have been
    * {@linkplain HttpServer#start() started}.
@@ -118,8 +119,9 @@ public class HttpServerStartingExtension extends AbstractBlockingExtension {
    * {@linkplain HttpServer#start() starts them}.
    *
    * <p>If any {@link HttpServer}s were {@linkplain HttpServer#start()
-   * started}, then a {@linkplain #fireBlockingEvent(BeanManager)
-   * blocking event is fired}.</p>
+   * started}, then the CDI container is {@linkplain
+   * AbstractBlockingExtension politely blocked} until they are
+   * {@linkplain HttpServer#shutdown() stopped}.</p>
    *
    * @param event the event signaling that the CDI container has
    * started; ignored; may be {@code null}
@@ -134,9 +136,14 @@ public class HttpServerStartingExtension extends AbstractBlockingExtension {
    *
    * @see HttpServer#start()
    *
-   * @see #fireBlockingEvent(BeanManager)
+   * @see AbstractBlockingExtension
    */
-  private final void startHttpServers(@Observes @Initialized(ApplicationScoped.class) @Priority(LIBRARY_AFTER) final Object event, final BeanManager beanManager) throws IOException {
+  private final void startHttpServers(@Observes
+                                      @Initialized(ApplicationScoped.class)
+                                      @Priority(LIBRARY_AFTER - 1)
+                                      final Object event,
+                                      final BeanManager beanManager)
+    throws IOException {
     if (this.logger.isTraceEnabled()) {
       this.logger.trace("ENTRY {} {} {}, {}", this.getClass().getName(), "startHttpServers", event, beanManager);
     }
@@ -175,70 +182,147 @@ public class HttpServerStartingExtension extends AbstractBlockingExtension {
                 
               }
             }
-          } catch (final IOException throwMe) {
-            if (!this.startedHttpServers.isEmpty()) {
-              final Iterator<HttpServer> iterator = this.startedHttpServers.iterator();
-              assert iterator != null;
-              while (iterator.hasNext()) {
-                final HttpServer httpServer = iterator.next();
-                if (httpServer != null && httpServer.isStarted()) {
-                  try {
-                    httpServer.shutdownNow();
-                    iterator.remove();
-                  } catch (final RuntimeException problem) {
-                    throwMe.addSuppressed(problem);
-                  }                  
-                }
+          } catch (final IOException startMethodFailed) {
+            try {
+              this.stopHttpServers(startMethodFailed, false /* forceRemove */);
+            } catch (final ExecutionException | InterruptedException suppressMe) {
+              if (suppressMe instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
               }
+              startMethodFailed.addSuppressed(suppressMe);
             }
-            throw throwMe;
+            throw startMethodFailed;
           }
-          if (!this.startedHttpServers.isEmpty()) {
-
-            // Here we fire an *asynchronous* event that will cause
-            // the thread it is received on to block (see the block()
-            // method below).  This is key: the JVM will be prevented
-            // from exiting, and the thread that the event is received
-            // on is (a) a non-daemon thread and (b) managed by the
-            // container.  This is, in other words, a clever way to
-            // take advantage of the CDI container's mandated thread
-            // management behavior so that the CDI container stays up
-            // for at least as long as the HttpServer we spawned
-            // above.
-            this.fireBlockingEvent(beanManager);
-            
+          
+          if (this.startedHttpServers.isEmpty()) {
+            this.unblock();
           }
+          
         }
       }
     }
-    if (logger != null && logger.isTraceEnabled()) {
+    if (logger.isTraceEnabled()) {
       logger.trace("EXIT {} {}", this.getClass().getName(), "startHttpServers");
     }
   }
 
   /**
-   * Calls {@link HttpServer#shutdownNow()} on any {@link HttpServer}
+   * Calls {@link HttpServer#shutdown()} on any {@link HttpServer}
    * instances that were {@linkplain #startHttpServers(Object,
    * BeanManager) started}.
    *
    * @param event the event signaling that the current CDI container
    * is about to shut down; may be {@code null}; ignored
    *
+   * @exception ExecutionException if there was a problem {@linkplain
+   * HttpServer#shutdown() shutting down} an {@link HttpServer}
+   *
+   * @exception InterruptedException if the {@link Thread} performing
+   * the shutdown was interrupted
+   *
    * @see #startHttpServers(Object, BeanManager)
    *
    * @see HttpServer#shutdownNow()
    */
-  private final void stopHttpServers(@Observes final BeforeShutdown event) {
+  private final void stopHttpServers(@Observes
+                                     @BeforeDestroyed(ApplicationScoped.class)
+                                     final Object event)
+    throws ExecutionException, InterruptedException {
+    if (logger.isTraceEnabled()) {
+      logger.trace("ENTRY {} {} {}", this.getClass().getName(), "stopHttpServers", event);
+    }
+    try {
+      this.stopHttpServers(null /* no IOException */, event != null /* forceRemove */);
+    } catch (final IOException willNeverHappen) {
+      throw new AssertionError("Unexpected theoretically impossible java.io.IOException", willNeverHappen);
+    }
+    if (logger.isTraceEnabled()) {
+      logger.trace("EXIT {} {}", this.getClass().getName(), "stopHttpServers");
+    }
+  }
+
+  /**
+   * Calls {@link HttpServer#shutdown()} on any {@link HttpServer}
+   * instances that were {@linkplain #startHttpServers(Object,
+   * BeanManager) started}.
+   *
+   * @param startMethodFailed an {@link IOException} that may have
+   * caused this method to be invoked; if non-{@code null} then any
+   * exceptions encountered during the shutdown process will be
+   * {@linkplain Throwable#addSuppressed(Throwable) added to it}
+   * before it is rethrown; may be {@code null}
+   *
+   * @param forceRemove whether to forcibly remove the {@link HttpServer}
+   * from an internal list of started {@link HttpServer}s regardless of
+   * whether an attempt to shut it down succeeded
+   *
+   * @exception ExecutionException if {@code startMethodFailed} is
+   * {@code null} and the {@link HttpServer#shutdown()} method
+   * resulted in a {@link Future} whose {@link Future#get()} method
+   * threw an {@link ExecutionException}
+   *
+   * @exception InterruptedException if {@code startMethodFailed} is
+   * {@code null} and the {@link Thread} performing the shutdown was
+   * interrupted
+   *
+   * @exception IOException if {@code startMethodFailed} is non-{@code
+   * null}
+   *
+   * @see #startHttpServers(Object, BeanManager)
+   *
+   * @see HttpServer#shutdownNow()
+   */
+  private final void stopHttpServers(final IOException startMethodFailed,
+                                     final boolean forceRemove)
+    throws ExecutionException, InterruptedException, IOException {
+    if (this.logger.isTraceEnabled()) {
+      this.logger.trace("ENTRY {} {} {}, {}", this.getClass().getName(), "stopHttpServers", startMethodFailed, forceRemove);
+    }
     synchronized (this.startedHttpServers) {
-      final Iterator<HttpServer> iterator = this.startedHttpServers.iterator();
-      assert iterator != null;
-      while (iterator.hasNext()) {
-        final HttpServer httpServer = iterator.next();
-        iterator.remove();
-        if (httpServer != null && httpServer.isStarted()) {          
-          httpServer.shutdownNow();
+      if (!this.startedHttpServers.isEmpty()) {
+        final Iterator<HttpServer> iterator = this.startedHttpServers.iterator();
+        assert iterator != null;
+        while (iterator.hasNext()) {
+          final HttpServer httpServer = iterator.next();
+          if (forceRemove) {
+            iterator.remove();
+          }
+          if (httpServer != null && httpServer.isStarted()) {
+            try {
+              final Future<HttpServer> shutdownFuture = httpServer.shutdown();
+              assert shutdownFuture != null;
+              final HttpServer stoppedServer = shutdownFuture.get();
+              if (!forceRemove) {
+                iterator.remove();
+              }
+              assert stoppedServer == httpServer;
+              assert !httpServer.isStarted();
+            } catch (final ExecutionException | InterruptedException | RuntimeException problem) {
+              if (problem instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+              }
+              if (startMethodFailed != null) {
+                startMethodFailed.addSuppressed(problem);
+              } else {
+                throw problem;
+              }
+            }
+          }
         }
       }
+      if (startMethodFailed == null) {
+        if (logger.isDebugEnabled()) {
+          logger.debug("Stopped HttpServer instances because of a normal shutdown");
+        }
+      } else {
+        if (logger.isErrorEnabled()) {
+          logger.error("Stopped HttpServer instances because of a java.io.IOException", startMethodFailed);
+        }
+        throw startMethodFailed;
+      }
+    }
+    if (logger.isTraceEnabled()) {
+      logger.trace("EXIT {} {}", this.getClass().getName(), "stopHttpServers");
     }
   }
   

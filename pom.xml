@@ -46,7 +46,7 @@
       <dependency>
         <groupId>javax.enterprise</groupId>
         <artifactId>cdi-api</artifactId>
-        <version>2.0-PFD2</version>
+        <version>2.0</version>
         <type>jar</type>
       </dependency>
 
@@ -83,7 +83,7 @@
       <dependency>
         <groupId>org.microbean</groupId>
         <artifactId>microbean-cdi</artifactId>
-        <version>0.1.2</version>
+        <version>0.2.0</version>
         <type>jar</type>
       </dependency>
       
@@ -283,6 +283,22 @@
       <plugins>
 
         <plugin>
+          <artifactId>maven-javadoc-plugin</artifactId>
+          <configuration>
+            <offlineLinks>
+              <offlineLink>
+                <url>http://static.javadoc.io/org.glassfish.grizzly/grizzly-framework/2.3.28</url>
+                <location>${project.basedir}/src/main/javadoc/grizzly-framework-2.3.28</location>
+              </offlineLink>
+               <offlineLink>
+                <url>http://static.javadoc.io/org.glassfish.grizzly/grizzly-http-server/2.3.28</url>
+                <location>${project.basedir}/src/main/javadoc/grizzly-http-server-2.3.28</location>
+              </offlineLink>
+            </offlineLinks>
+          </configuration>
+        </plugin>
+        
+        <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>findbugs-maven-plugin</artifactId>
           <version>3.0.4</version>
@@ -338,7 +354,7 @@
     <findbugs.threshold>Medium</findbugs.threshold>
 
     <!-- maven-javadoc-plugin properties; see https://maven.apache.org/plugins/maven-javadoc-plugin/javadoc-mojo.html -->
-    <links>http://docs.jboss.org/cdi/api/2.0-PFD/,http://docs.oracle.com/javaee/7/api/,https://grizzly.java.net/docs/2.3/apidocs/,https://ljnelson.github.io/microbean-cdi/apidocs/</links>
+    <links>http://docs.jboss.org/cdi/api/2.0/,http://docs.oracle.com/javaee/7/api/,https://ljnelson.github.io/microbean-cdi/apidocs/</links>
 
     <!-- maven-release-plugin properties -->
     <goals>deploy,site-deploy</goals>
